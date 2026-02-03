@@ -1,0 +1,142 @@
+import 'package:flutter/material.dart';
+
+void main() {
+  runApp(MyApp());
+}
+class Item {
+  String title;
+  String description;
+
+  Item({required this.title, required this.description});
+}
+class ItemRepository {
+  final List<Item> _items = [];
+
+  List<Item> getItems() => _items;
+
+  void addItem(Item item) {
+    _items.add(item);
+  }
+}
+
+class ItemViewModel extends ChangeNotifier {
+  final ItemRepository repository;
+
+  ItemViewModel(this.repository);
+
+  List<Item> get items => repository.getItems();
+
+  void addItem(String title, String desc) {
+    repository.addItem(Item(title: title, description: desc));
+    notifyListeners();
+  }
+}
+class ChangeNotifierProvider extends InheritedNotifier<ItemViewModel> {
+  final ItemViewModel viewModel;
+
+  const ChangeNotifierProvider({
+    super.key,
+    required this.viewModel,
+    required Widget child,
+  }) : super(notifier: viewModel, child: child);
+
+  static ItemViewModel of(BuildContext context) {
+    final provider =
+        context.dependOnInheritedWidgetOfExactType<ChangeNotifierProvider>();
+    assert(provider != null, "No ViewModel found in context");
+    return provider!.viewModel;
+  }
+}
+
+class MyApp extends StatelessWidget {
+  final ItemViewModel vm = ItemViewModel(ItemRepository());
+
+  @override
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      viewModel: vm,
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: HomeScreen(),
+      ),
+    );
+  }
+}
+
+class HomeScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final vm = ChangeNotifierProvider.of(context);
+
+    return Scaffold(
+      appBar: AppBar(title: Text("Danh sách dữ liệu")),
+      body: AnimatedBuilder(
+        animation: vm,
+        builder: (context, _) => vm.items.isEmpty
+            ? Center(child: Text("Chưa có dữ liệu"))
+            : ListView.builder(
+                itemCount: vm.items.length,
+                itemBuilder: (_, index) {
+                  final item = vm.items[index];
+                  return Card(
+                    margin: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    child: ListTile(
+                      title: Text(item.title),
+                      subtitle: Text(item.description),
+                    ),
+                  );
+                },
+              ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        child: Icon(Icons.add),
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => AddItemScreen()),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class AddItemScreen extends StatelessWidget {
+  final titleController = TextEditingController();
+  final descController = TextEditingController();
+
+  @override
+  Widget build(BuildContext context) {
+    final vm = ChangeNotifierProvider.of(context);
+
+    return Scaffold(
+      appBar: AppBar(title: Text("Thêm dữ liệu")),
+      body: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          children: [
+            TextField(
+              controller: titleController,
+              decoration: InputDecoration(labelText: "Tiêu đề"),
+            ),
+            TextField(
+              controller: descController,
+              decoration: InputDecoration(labelText: "Mô tả"),
+            ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              child: Text("Lưu"),
+              onPressed: () {
+                if (titleController.text.isEmpty ||
+                    descController.text.isEmpty) return;
+
+                vm.addItem(titleController.text, descController.text);
+                Navigator.pop(context);
+              },
+            )
+          ],
+        ),
+      ),
+    );
+  }
+}
