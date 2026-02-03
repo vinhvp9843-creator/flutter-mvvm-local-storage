@@ -1,140 +1,100 @@
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
-void main() {
-  runApp(MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Hive.initFlutter();
+  var box = await Hive.openBox('itemsBox');
+  runApp(MyApp(box));
 }
+
+///MODEL 
 class Item {
-  String title;
-  String description;
-
-  Item({required this.title, required this.description});
+  final String title;
+  Item(this.title);
 }
+
+///REPOSITORY 
 class ItemRepository {
-  final List<Item> _items = [];
+  final Box box;
+  ItemRepository(this.box);
 
-  List<Item> getItems() => _items;
+  List<Item> getItems() =>
+      box.values.map((e) => Item(e.toString())).toList();
 
-  void addItem(Item item) {
-    _items.add(item);
+  Future<void> addItem(Item item) async {
+    await box.add(item.title);
   }
 }
 
+///VIEWMODEL
 class ItemViewModel extends ChangeNotifier {
   final ItemRepository repository;
+  List<Item> items = [];
 
-  ItemViewModel(this.repository);
+  ItemViewModel(this.repository) {
+    loadItems();
+  }
 
-  List<Item> get items => repository.getItems();
-
-  void addItem(String title, String desc) {
-    repository.addItem(Item(title: title, description: desc));
+  void loadItems() {
+    items = repository.getItems();
     notifyListeners();
   }
-}
-class ChangeNotifierProvider extends InheritedNotifier<ItemViewModel> {
-  final ItemViewModel viewModel;
 
-  const ChangeNotifierProvider({
-    super.key,
-    required this.viewModel,
-    required Widget child,
-  }) : super(notifier: viewModel, child: child);
-
-  static ItemViewModel of(BuildContext context) {
-    final provider =
-        context.dependOnInheritedWidgetOfExactType<ChangeNotifierProvider>();
-    assert(provider != null, "No ViewModel found in context");
-    return provider!.viewModel;
+  Future<void> addItem(String title) async {
+    await repository.addItem(Item(title));
+    loadItems();
   }
 }
 
+///VIEW
 class MyApp extends StatelessWidget {
-  final ItemViewModel vm = ItemViewModel(ItemRepository());
+  final Box box;
+  MyApp(this.box);
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      viewModel: vm,
-      child: MaterialApp(
-        debugShowCheckedModeBanner: false,
-        home: HomeScreen(),
-      ),
-    );
+    return MaterialApp(home: HomeScreen(ItemViewModel(ItemRepository(box))));
   }
 }
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
+  final ItemViewModel vm;
+  HomeScreen(this.vm);
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final controller = TextEditingController();
+
   @override
   Widget build(BuildContext context) {
-    final vm = ChangeNotifierProvider.of(context);
-
     return Scaffold(
-      appBar: AppBar(title: Text("Danh sách dữ liệu")),
+      appBar: AppBar(title: Text("MVVM + Hive")),
       body: AnimatedBuilder(
-        animation: vm,
-        builder: (context, _) => vm.items.isEmpty
-            ? Center(child: Text("Chưa có dữ liệu"))
-            : ListView.builder(
-                itemCount: vm.items.length,
-                itemBuilder: (_, index) {
-                  final item = vm.items[index];
-                  return Card(
-                    margin: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    child: ListTile(
-                      title: Text(item.title),
-                      subtitle: Text(item.description),
-                    ),
-                  );
-                },
-              ),
+        animation: widget.vm,
+        builder: (_, __) => ListView.builder(
+          itemCount: widget.vm.items.length,
+          itemBuilder: (_, i) =>
+              ListTile(title: Text(widget.vm.items[i].title)),
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         child: Icon(Icons.add),
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => AddItemScreen()),
-          );
+        onPressed: () async {
+          if (controller.text.isEmpty) return;
+          await widget.vm.addItem(controller.text);
+          controller.clear();
         },
       ),
-    );
-  }
-}
-
-class AddItemScreen extends StatelessWidget {
-  final titleController = TextEditingController();
-  final descController = TextEditingController();
-
-  @override
-  Widget build(BuildContext context) {
-    final vm = ChangeNotifierProvider.of(context);
-
-    return Scaffold(
-      appBar: AppBar(title: Text("Thêm dữ liệu")),
-      body: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          children: [
-            TextField(
-              controller: titleController,
-              decoration: InputDecoration(labelText: "Tiêu đề"),
-            ),
-            TextField(
-              controller: descController,
-              decoration: InputDecoration(labelText: "Mô tả"),
-            ),
-            SizedBox(height: 20),
-            ElevatedButton(
-              child: Text("Lưu"),
-              onPressed: () {
-                if (titleController.text.isEmpty ||
-                    descController.text.isEmpty) return;
-
-                vm.addItem(titleController.text, descController.text);
-                Navigator.pop(context);
-              },
-            )
-          ],
+      bottomNavigationBar: Padding(
+        padding: EdgeInsets.all(8),
+        child: TextField(
+          controller: controller,
+          decoration: InputDecoration(
+              hintText: "Nhập dữ liệu", border: OutlineInputBorder()),
         ),
       ),
     );
